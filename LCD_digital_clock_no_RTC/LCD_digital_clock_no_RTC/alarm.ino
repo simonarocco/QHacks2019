@@ -10,7 +10,7 @@ const byte EEPROM_START_ADDRESS = 0;
 //////////////////////////////////////////////////////////////////////////
 tmElements_t alarm_read_eeprom() {
   tmElements_t tm_alarm;
-  enable_alarm = EEPROM.read(EEPROM_START_ADDRESS);
+  enable_alarm = true;
   tm_alarm.Hour = EEPROM.read(EEPROM_START_ADDRESS + 1);
   tm_alarm.Minute = EEPROM.read(EEPROM_START_ADDRESS + 2);
   tm_alarm.Second = EEPROM.read(EEPROM_START_ADDRESS + 3);
@@ -90,10 +90,12 @@ void alarm(time_t tm, tmElements_t tm_alarm) {
     time_t t_time, t_alarm;
     t_time = tm; //convert tmElements_t element to time_t variable
     t_alarm = makeTime(tm_alarm);
-
+    
     if (t_time == t_alarm) {
       alarm_startTime = millis();
       switch_alarm(HIGH);
+      digitalWrite(ALARM_BUZZER, 5);
+      lightOn = true;
     }
   }
 }
@@ -146,6 +148,8 @@ void auto_off_alarm() {
   if (alarm_state() == HIGH) {
     if (millis() >= alarm_startTime + ALARM_AUTO_OFF * 1000) {
       switch_alarm(LOW);
+      digitalWrite(ALARM_BUZZER, LOW);
+      lightOn = false;
     }
   }
 }

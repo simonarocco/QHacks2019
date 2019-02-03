@@ -17,6 +17,8 @@
 #define DEBUG_PRINTLN(x)
 #endif
 
+#define ALARM_BUZZER 6
+
 #include <Time.h> // https://github.com/PaulStoffregen/Time
 #include <LiquidCrystal.h> // control LCDs based on the Hitachi HD44780
 
@@ -42,6 +44,7 @@ byte hourFormat = 24;
 
 time_t t;
 tmElements_t tm, tm_alarm;
+bool lightOn = false;
 
 unsigned long previousMillis = 0;   //hold the current millis
 
@@ -50,10 +53,13 @@ unsigned long previousMillis = 0;   //hold the current millis
 //////////////////////////////////////////////////////////////////////////
 void setup() {
   DEBUG_SERIAL_BEGIN(9600);
+  Serial.begin(9600);
   setTime(compiled_datetime()); // get the date and time the compiler was run
   lcd.begin(16, 2);  // start the library
   switch_alarm(LOW);
   tm_alarm = alarm_read_eeprom(); //load alarm time from eeprom
+  pinMode(ALARM_BUZZER, OUTPUT);
+  digitalWrite(ALARM_BUZZER, LOW);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -67,11 +73,11 @@ void loop() {
     previous_ss = second(t);
     show_time(FIRST_LINE);
     show_date(SECOND_LINE);
-    DEBUG_PRINT(dateStr(t));
-    DEBUG_PRINT(" ");
-    DEBUG_PRINTLN(timeStr(t));
-    alarm(t, tm_alarm); //turn on alarm if current time = alarm time
-    auto_off_alarm(); //turn off alarm automatically (set by ALARM_OFF_INTERVAL)
+    alarm(t, tm_alarm);//turn on alarm if current time = alarm time
+    while(lightOn == true) {
+      button_input();
+      auto_off_alarm();
+    }
   }
 
   String input = serial_input();
@@ -158,7 +164,7 @@ void save_settings(String input) {
     }
   }
 
-  if (cmd == 'T' || cmd == 'A') { //set time or set alarm
+  if (cmd == 'T' || cmd == 'A' || cmd == 'J') { //set time or set alarm
     tm_set.Hour = input.substring(1, 3).toInt();
     tm_set.Minute = input.substring(3, 5).toInt();
     tm_set.Second = input.substring(5, 7).toInt();
@@ -209,6 +215,55 @@ void save_settings(String input) {
     }
   }
 
+  if (cmd == 'J') { //set alarm
+    // checking for valid time, save settings if a time is valid
+    if (check_time(tm_set.Hour, tm_set.Minute, tm_set.Second)) {
+      t_set = makeTime(tm_set); //convert from tmElements_t to time_t
+      tm_alarm = tm_set;
+      alarm_write_eeprom(tm_set);
+      DEBUG_PRINT("Alarm Time changed to ");
+      DEBUG_PRINTLN(timeStr(t_set));
+      lcd.clear();
+      lcd.print("Traffic");
+      digitalWrite(ALARM_BUZZER, HIGH);
+      delay(250);
+      digitalWrite(ALARM_BUZZER, LOW);
+      delay(250);
+      lcd.setCursor(0, SECOND_LINE);
+      lcd.print("Delay");
+      digitalWrite(ALARM_BUZZER, HIGH);
+      delay(250);
+      digitalWrite(ALARM_BUZZER, LOW);
+      delay(250);
+      lcd.clear();
+      lcd.print("Alarm");
+      digitalWrite(ALARM_BUZZER, HIGH);
+      delay(250);
+      digitalWrite(ALARM_BUZZER, LOW);
+      delay(250);
+      lcd.setCursor(0, SECOND_LINE);
+      lcd.print("Changed");
+      digitalWrite(ALARM_BUZZER, HIGH);
+      delay(250);
+      digitalWrite(ALARM_BUZZER, LOW);
+      delay(250);
+      lcd.clear();
+      digitalWrite(ALARM_BUZZER, LOW);
+      lcd.print("New alarm time");
+      digitalWrite(ALARM_BUZZER, LOW);
+      lcd.setCursor(0, SECOND_LINE);
+      lcd.print(timeStr(t_set));
+    }
+    else {
+      DEBUG_PRINT("Alarm Time update failed: ");
+      DEBUG_PRINTLN(timeStr(t_set));
+      lcd.clear();
+      lcd.print("Alarm Err: ");
+      lcd.setCursor(0, SECOND_LINE);
+      lcd.print(timeStr(t_set));
+    }
+  }
+
   delay(2000);
   lcd.clear();
 }
@@ -239,6 +294,8 @@ void button_input() {
       break;
     case btnDOWN:
       if (alarm_state() == true) { //if alarm is triggered
+        digitalWrite(ALARM_BUZZER, LOW);
+        lightOn = false;
         switch_alarm(LOW); //turn off the alarm
       } else {
         toggle_alarm_mode(); //disable or enable the alarm
